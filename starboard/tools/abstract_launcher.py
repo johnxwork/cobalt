@@ -113,7 +113,7 @@ class AbstractLauncher(object):
     if not out_directory:
       out_directory = paths.BuildOutputDirectory(platform_name, config)
     self.out_directory = out_directory
-    self.coverage_directory = kwargs.get("coverage_directory", out_directory)
+    self.coverage_file_path = kwargs.get("coverage_file_path", None)
 
     output_file = kwargs.get("output_file", None)
     if not output_file:
@@ -282,6 +282,33 @@ class AbstractLauncher(object):
       (Host, port) tuple for use in connecting to the target device.
     """
     return self.device_id, port
+
+  def CreateDeviceToHostTunnel(self, host_port, device_port):
+    """Creates a tunnel that transfers requests from device to host.
+
+    This is used by on-device processes to connect to services on the host.
+
+    Args:
+      host_port: The host_port to receive requests from the device.
+      device_port: The port on device to proxy on-device requests.
+
+    Returns:
+      True if succeed and false otherwise.
+    """
+    del host_port
+    del device_port
+    return False
+
+  def RemoveDeviceToHostTunnel(self, host_port):
+    """Removes the tunnel created from CreateDeviceToHostTunnel.
+
+    Args:
+      host_port: The host_port to receive requests from the device.
+    Returns:
+      True if succeed and false otherwise.
+    """
+    del host_port
+    return False
 
   def GetTargetPath(self):
     """Constructs the path to an executable target.
