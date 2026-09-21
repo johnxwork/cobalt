@@ -14,6 +14,7 @@
 
 package dev.cobalt.util;
 
+import androidx.annotation.VisibleForTesting;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -188,8 +189,15 @@ public class JavaSwitches {
 
   private static Boolean sOverrideForTesting;
 
+  private static Boolean sIs64BitProcessForTesting;
+
   public static void setOverrideForTesting(Boolean override) {
     sOverrideForTesting = override;
+  }
+
+  @VisibleForTesting
+  public static void setIs64BitProcessForTesting(Boolean is64BitProcess) {
+    sIs64BitProcessForTesting = is64BitProcess;
   }
 
   @CalledByNative
@@ -298,11 +306,47 @@ public class JavaSwitches {
     }
   }
 
+  /**
+   * Returns true if Cobalt is running as a 64-bit process.
+   *
+   * <p>Note this reflects the bitness of the <em>installed APK</em>, not the device's advertised
+   * {@code ro.product.cpu.abilist}. {@link BuildInfo#getArch} combines {@code Process.is64Bit()}
+   * with a build-time CPU family constant, so it identifies the APK variant that Play selected for
+   * this device rather than what the hardware is capable of.
+   */
+  private static boolean is64BitProcess() {
+    if (sIs64BitProcessForTesting != null) {
+      return sIs64BitProcessForTesting;
+    }
+    String arch = BuildInfo.getArch();
+    return "arm64".equals(arch) || "x86_64".equals(arch);
+  }
+
+  /**
+   * Returns true if the default {@code --force-gpu-mem-available-mb} budget should be applied.
+   *
+   * <p>The budget is skipped on 64-bit builds because newer high-end Android TV devices need larger
+   * tile memory budgets for 4K UI rendering (b/549674099). Play serves single-ABI APKs and picks the
+   * arm64-v8a variant for any device whose {@code ro.product.cpu.abilist} contains arm64-v8a, so
+   * hybrid devices reporting "arm64-v8a,armeabi-v7a,armeabi" run the 64-bit APK and are excluded
+   * here.
+   *
+   * <p>1GB devices are an exception: they may receive the 64-bit APK but do not have the headroom
+   * that motivated the exclusion, so they keep the default budget.
+   *
+   * <p>This mirrors the native fallbacks guarded by {@code ARCH_CPU_32_BITS} in
+   * gpu/command_buffer/service/service_utils.cc and
+   * third_party/blink/renderer/platform/widget/compositing/layer_tree_settings.cc.
+   */
+  private static boolean shouldApplyDefaultGpuMemLimit() {
+    return !is64BitProcess() || DeviceUtil.is1GbDevice();
+  }
+
   public static List<String> getDefaultCommandLineArgs() {
     List<String> defaultArgs = new ArrayList<>();
     defaultArgs.add(DEFAULT_DISABLE_QUIC);
     defaultArgs.add(ENABLE_LOW_END_DEVICE_MODE_SWITCH);
-    if (!"arm64".equals(BuildInfo.getArch()) && !"x86_64".equals(BuildInfo.getArch())) {
+    if (shouldApplyDefaultGpuMemLimit()) {
       defaultArgs.add("--force-gpu-mem-available-mb=" + DEFAULT_FORCE_GPU_MEM_AVAILABLE_MB);
     }
     defaultArgs.add(
@@ -380,7 +424,7 @@ public class JavaSwitches {
         getSanitizedNumericValue(javaSwitches, JavaSwitches.FORCE_GPU_MEM_AVAILABLE_MB);
     if (forceGpuMem != null) {
       extraCommandLineArgs.add("--force-gpu-mem-available-mb=" + forceGpuMem);
-    } else if (!"arm64".equals(BuildInfo.getArch()) && !"x86_64".equals(BuildInfo.getArch())) {
+    } else if (shouldApplyDefaultGpuMemLimit()) {
       extraCommandLineArgs.add(
           "--force-gpu-mem-available-mb=" + DEFAULT_FORCE_GPU_MEM_AVAILABLE_MB);
     }

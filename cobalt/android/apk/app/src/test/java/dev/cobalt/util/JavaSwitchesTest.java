@@ -40,12 +40,14 @@ public class JavaSwitchesTest {
     ContextUtils.initApplicationContextForTests(RuntimeEnvironment.getApplication());
     clearConfigFiles();
     JavaSwitches.setOverrideForTesting(null);
+    JavaSwitches.setIs64BitProcessForTesting(null);
     DeviceUtil.resetForTesting();
   }
 
   @After
   public void tearDown() {
     JavaSwitches.setOverrideForTesting(null);
+    JavaSwitches.setIs64BitProcessForTesting(null);
     clearConfigFiles();
     DeviceUtil.resetForTesting();
   }
@@ -494,5 +496,61 @@ public class JavaSwitchesTest {
     List<String> args = JavaSwitches.getExtraCommandLineArgs(switches);
     assertThat(args).contains("--force-device-scale-factor=1");
     assertThat(args).doesNotContain("--force-device-scale-factor=1.5");
+  }
+
+  @Test
+  public void testDefaultGpuMemLimit_32BitDevice_Applied() {
+    JavaSwitches.setIs64BitProcessForTesting(false);
+    DeviceUtil.setIs1GbDeviceForTesting(false);
+
+    assertThat(JavaSwitches.getDefaultCommandLineArgs())
+        .contains("--force-gpu-mem-available-mb=64");
+    assertThat(JavaSwitches.getExtraCommandLineArgs(new HashMap<>()))
+        .contains("--force-gpu-mem-available-mb=64");
+  }
+
+  @Test
+  public void testDefaultGpuMemLimit_64BitDevice_NotApplied() {
+    JavaSwitches.setIs64BitProcessForTesting(true);
+    DeviceUtil.setIs1GbDeviceForTesting(false);
+
+    assertThat(JavaSwitches.getDefaultCommandLineArgs())
+        .doesNotContain("--force-gpu-mem-available-mb=64");
+    assertThat(JavaSwitches.getExtraCommandLineArgs(new HashMap<>()))
+        .doesNotContain("--force-gpu-mem-available-mb=64");
+  }
+
+  @Test
+  public void testDefaultGpuMemLimit_64BitLowRamDevice_Applied() {
+    JavaSwitches.setIs64BitProcessForTesting(true);
+    DeviceUtil.setIs1GbDeviceForTesting(true);
+
+    assertThat(JavaSwitches.getDefaultCommandLineArgs())
+        .contains("--force-gpu-mem-available-mb=64");
+    assertThat(JavaSwitches.getExtraCommandLineArgs(new HashMap<>()))
+        .contains("--force-gpu-mem-available-mb=64");
+  }
+
+  @Test
+  public void testDefaultGpuMemLimit_32BitLowRamDevice_Applied() {
+    JavaSwitches.setIs64BitProcessForTesting(false);
+    DeviceUtil.setIs1GbDeviceForTesting(true);
+
+    assertThat(JavaSwitches.getDefaultCommandLineArgs())
+        .contains("--force-gpu-mem-available-mb=64");
+  }
+
+  @Test
+  public void testDefaultGpuMemLimit_JavaSwitchOverridesArchDefault() {
+    Map<String, String> switches = new HashMap<>();
+    switches.put(JavaSwitches.FORCE_GPU_MEM_AVAILABLE_MB, "256");
+
+    // The explicit switch wins on every device class, including 64-bit 1GB devices.
+    JavaSwitches.setIs64BitProcessForTesting(true);
+    DeviceUtil.setIs1GbDeviceForTesting(true);
+
+    List<String> args = JavaSwitches.getExtraCommandLineArgs(switches);
+    assertThat(args).contains("--force-gpu-mem-available-mb=256");
+    assertThat(args).doesNotContain("--force-gpu-mem-available-mb=64");
   }
 }
